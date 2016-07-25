@@ -85,7 +85,7 @@ Configure wifi adapter with Ansible in Raspberry pi.
   ```
  In my case, card 1 identifies my USB Audio adapter.
 
- * Testing record capability of our sound card:
+## Testing record capability of our sound card:
  ```python
      """
     PyAudio example: Record a few seconds of audio and save to a WAVE
