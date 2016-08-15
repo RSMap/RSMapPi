@@ -5,7 +5,7 @@ import shutil
 import sounddevice as sd
 
 # Test
-import time
+
 ######
 
 
@@ -50,22 +50,33 @@ def callback(indata, frames, time, status):
     global cumulated_status
     global line_num
     global fl
+    global consequtive
+
     cumulated_status |= status
 
     if any(indata):
         magnitude = np.abs(np.fft.rfft(indata[:, 0], n=fftsize))
         magnitude *= gain / fftsize
 
-        queue.put(np.sum(magnitude[low_bin:low_bin + columns]), block=False)
-        line = (gradient[int(np.clip(x, 0, 1) * (len(gradient) - 1))]
-                 for x in magnitude[low_bin:low_bin + columns])
+        queue.put(np.sum(magnitude[low_bin:low_bin + columns]))
+
+        line = ""
+
+        for x in magnitude[low_bin:low_bin + columns]:
+            line += (gradient[int(np.clip(x, 0, 1) * (len(gradient) - 1))])
+
         print(
             *line, sep='',
-            end='\x1b[0m+ ' + str(np.sum(magnitude[low_bin:low_bin + columns])) + ' ' + str(line_num) + '\n',
+            end='\x1b[0m+ ' + str(np.sum(magnitude[low_bin:low_bin + columns])) + ' ' + str(line_num) + ' ' + str(consequtive)  + '\n',
             flush=True
             )
 
-        fl.write(str(line_num))
+        print(
+            line, sep='',
+            end='\x1b[0m+ ' + str(np.sum(magnitude[low_bin:low_bin + columns])) + ' ' + str(line_num)+ ' ' + str(consequtive)  + '\n', file=fl,
+            flush=True
+            )
+
         line_num += 1
 
     else:
@@ -86,33 +97,44 @@ def producer(queue, line_num, fl):
     if cumulated_status:
         logging.warning(str(cumulated_status))
 
-
-# def producer(queue, n):
-#     while n<10:
-#         n += 1
-#         queue.put(n)
-#         print("added " + repr(n))
-#     queue.put(_sentinel)
-
 def consumer(queue, fo):
+    global consequtive
     fo.write('[')
     while True:
         data = queue.get()
         if data is _sentinel:
-            print("end!")
-            fo.write(']')
+            fo.write(']\n')
             fo.close()
             break
+        row_sum = np.sum(data)
+
+        if(row_sum > 0.59 ):
+            consequtive += 1
+        else:
+            if(consequtive > 110):
+                print("puede que mas de un coche!")
+            elif(consequtive > 50):
+                print("coche!")
+            elif(consequtive > 38):
+                print("puede que coche!")
+
+            consequtive = 0
+
         fo.write(str(data))
         fo.write(', ')
 
 global line_num
-line_num = 0
-queue = Queue()
-fo = open('output', 'w')
+global consequtive
 
+consequtive = 0
+line_num = 0
+
+fo = open('output', 'w')
 global fl
 fl = open('lines', 'w')
+
+queue = Queue()
+
 thread_prod = Thread(target=producer, args=(queue, line_num, fl))
 thread_cons = Thread(target=consumer, args=(queue, fo))
 

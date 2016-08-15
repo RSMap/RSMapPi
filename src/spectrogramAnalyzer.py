@@ -2,15 +2,21 @@ import numpy as np
 from queue import Queue, Empty
 
 class Analyzer:
-
-    def __init__(self, min_block, max_block, analyze):
+    def __init__(self, min_block, max_block, datasource):
         self.data = Queue()
         self.min_block = min_block
         self.max_block = max_block
-        self.analyze = analyze
+        self.datasource = datasource
 
     def data_size(self):
         return self.data.qsize()
+
+    def get_datasource_sample(self, sample):
+        try:
+            return self.datasource.get()
+        except Empty:
+            print("empty datasource")
+            return None
 
     def add_sample(self, sample):
         self.data.put(sample)
@@ -19,22 +25,21 @@ class Analyzer:
         return self.data.get()
 
     def analyze(self):
-        aux_data = []
+        readed_data = Queue()
         num_values_readed = 0
         null_values_readed = 0
-        while self.analyze:
+        while True:
             try:
                 value = self.data.get(block=False)
                 num_values_readed += 1
                 if value < 0.5:
                     null_values_readed += 1
                     num_values_readed += 1
-                    aux_data.insert(num_values_readed, -1)
+                    readed_data.put(-1)
                 else:
-                    aux_data.insert(value)
+                    readed_data.put(value)
             except Empty:
-                print(str(aux_data))
-                self.analyze = False
+                print(str(readed_data))
 
 
 def main():
