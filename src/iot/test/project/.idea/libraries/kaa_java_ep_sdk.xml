@@ -1,0 +1,11 @@
+<component name="libraryTable">
+  <library name="kaa-java-ep-sdk">
+    <CLASSES>
+      <root url="jar://$PROJECT_DIR$/lib/kaa-java-ep-sdk.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES>
+      <root url="jar://$PROJECT_DIR$/lib/kaa-java-ep-sdk.jar!/" />
+    </SOURCES>
+  </library>
+</component>
