@@ -58,6 +58,7 @@ def callback(indata, frames, time, status):
         magnitude = np.abs(np.fft.rfft(indata[:, 0], n=fftsize))
         magnitude *= gain / fftsize
 
+        # put row sum on queue to analyze it
         queue.put(np.sum(magnitude[low_bin:low_bin + columns]))
 
         line = ""
@@ -99,17 +100,20 @@ def producer(queue, line_num, fl):
 
 def consumer(queue, fo):
     global consequtive
-    fo.write('[')
+    # fo.write('[')
     while True:
         data = queue.get()
+        print(data)
         if data is _sentinel:
-            fo.write(']\n')
-            fo.close()
+            #fo.write(']\n')
+            #fo.close()
             break
         row_sum = np.sum(data)
+        print("row " + row_sum)
 
         if(row_sum > 0.59 ):
             consequtive += 1
+
         else:
             if(consequtive > 110):
                 print("puede que mas de un coche!")
@@ -120,8 +124,9 @@ def consumer(queue, fo):
 
             consequtive = 0
 
-        fo.write(str(data))
-        fo.write(', ')
+        print("str data " + str(data))
+        #fo.write(str(data))
+        #fo.write(', ')
 
 global line_num
 global consequtive

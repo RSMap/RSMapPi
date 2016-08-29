@@ -9,6 +9,9 @@ public class MyClass {
 			while(s.equals("x")==false) {
 				writer.println(s);
 				s = bufferRead.readLine();
+				if(s == null){
+					writer.close();
+				}
 			}
 			writer.close();
 		} catch(IOException e) {
@@ -16,4 +19,3 @@ public class MyClass {
 		}
 	}
 }
-
