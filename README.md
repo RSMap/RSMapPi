@@ -1,5 +1,5 @@
 # RSMapPi
-RSMap Raspberry Pi repository
+Repositorio de RSMap para Raspberry Pi
 
 ## Vehicle sound detector
 
