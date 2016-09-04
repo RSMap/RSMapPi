@@ -1,5 +1,15 @@
 # RSMapPi
+
 Repositorio de RSMap para Raspberry Pi
+
+*note: This README was written in English so that everyone could understand how to send data to RSMap.*
+
+## Technologies
+
+This moule uses Python and Java. The most important library is [SoundDevice](http://python-sounddevice.readthedocs.io/en/0.3.4/) which allow us to capture microphone audio. Java's SDK was created with [KAA](http://www.kaaproject.org/).
+
+Python detection module send data over TCP socket opened by DataSender class which report that data to Cassandra.
+
 
 ## Vehicle sound detector
 
