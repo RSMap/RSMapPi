@@ -4,20 +4,67 @@ import numpy as np
 import shutil
 import sounddevice as sd
 import subprocess
+import requests
+import sys
+from queue import Queue, Empty
+from threading import Thread
 
 # Test
 import time
 import socket
 ######
 
+# check if this client send data before
+device_id = 'TFGDevice' # case sensitive
+device_location = 'Avda Dilar'
+latitude = '37.177336'
+longitude = '-3.598557'
+signal_type = 'u'
+# level -1 means device is connected and it will send data soon.
+level = '-1.0'
+new_device_payload = {'device_id':device_id, 'lat':latitude, 'long':longitude, 'level':level, 'type':signal_type}
+existing_device_payload = {'level': level}
+signals_list_url = 'http://52.210.3.41/api/signals/'
+signal_url = 'http://52.210.3.41/api/signal/'+device_id+'/'
 
-from queue import Queue, Empty
-from threading import Thread
+req = requests.post(signals_list_url, new_device_payload)
 
+if(req.status_code == 400):
+    print("Device already exists, sending connect signal")
+    req = requests.patch(signal_url, existing_device_payload)
+    if(req.status_code == 200):
+        print("Connection successful")
+    else:
+        print("Can't send connected signal, exiting")
+        sys.exit()
+elif(req.status_code == 201):
+    print("Connection successful, device added to device's database")
+else:
+    print("Device can't connect to rest service, check your connection.")
+    sys.exit()
+
+
+
+# Connecting to DataSender socket on localhost
+socket = socket.socket()
+socket.connect(('localhost', 5000))
+# Send device location
+device_location_sock = device_location+"\n"
+device_location_bytes = bytes(device_location_sock, 'utf-8')
+socket.send(device_location_bytes)
+# Send device id
+device_id_sock = device_id+"\n"
+device_id_bytes = bytes(device_id_sock, 'utf-8')
+socket.send(device_id_bytes)
+
+# Wait prudent time
+time.sleep(20)
+
+# Variable definition
 _sentinel = object()
-np.set_printoptions(threshold=np.inf)
+np.set_printoptions(threshold=np.inf) # full numpy array output (test purpose)
 
-gain = 10
+gain = 10 # multiplier factor
 columns = 100 # numero de niveles de cuantización
 device = 2 # id del dispositivo
 block_duration = 100 # duración de cada bloque capturado (ms)
@@ -27,14 +74,8 @@ low = 500 # frecuencia de muestreo baja
 delta_f = (high - low) / columns # valor de cuantización
 fftsize = np.ceil(samplerate / delta_f).astype(int) # definimos el número de bins usados para dividir la ventana en bandas, determina la resolucion en el dominio de la frecuencia
 low_bin = np.floor(low / delta_f) # resolución de frecuencia de la ventana
-cumulated_status = sd.CallbackFlags()
+cumulated_status = sd.CallbackFlags() # enable logging output
 
-socket = socket.socket()
-socket.connect(('localhost', 5000))
-socket.send(b"Granada\n")
-socket.send(b"TFGdevice\n")
-
-time.sleep(20)
 
 colors = 30, 34, 35, 91, 93, 97
 chars = ' :%#\t#%:'
@@ -166,3 +207,10 @@ thread_cons = Thread(target=consumer, args=(queue, ))
 
 thread_prod.start()
 thread_cons.start()
+
+
+# time.sleep(20)
+# # removing from database
+# req = requests.delete(signal_url)
+# if(req.status_code == 204):
+#     print("Device removed from device's database")
