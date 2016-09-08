@@ -61,7 +61,7 @@ socket.send(device_id_bytes)
 time.sleep(20)
 
 # Variable definition
-_sentinel = object()
+_sentinel = object() # sentinel indicates end queue processing
 np.set_printoptions(threshold=np.inf) # full numpy array output (test purpose)
 
 gain = 10 # multiplier factor
@@ -70,7 +70,7 @@ device = 2 # id del dispositivo
 block_duration = 100 # duración de cada bloque capturado (ms)
 samplerate = 44100 # frecuencia de muestreo
 high = 2000 # frecuencia de muestreo alta
-low = 500 # frecuencia de muestreo baja
+low = 450 # frecuencia de muestreo baja
 delta_f = (high - low) / columns # valor de cuantización
 fftsize = np.ceil(samplerate / delta_f).astype(int) # definimos el número de bins usados para dividir la ventana en bandas, determina la resolucion en el dominio de la frecuencia
 low_bin = np.floor(low / delta_f) # resolución de frecuencia de la ventana
@@ -117,13 +117,6 @@ def callback(indata, frames, time, status):
             flush=True
             )
 
-        # print(
-        #     line, sep='',
-        #     end='\x1b[0m+ ' + str(np.sum(magnitude[low_bin:low_bin + columns])) + ' ' + str(line_num)+ ' ' + str(consequtive)  + '\n', file=fl,
-        #     flush=True
-        #     )
-
-
         line_num += 1
 
     else:
@@ -144,14 +137,22 @@ def producer(queue, line_num):
     if cumulated_status:
         logging.warning(str(cumulated_status))
 
+
 def consumer(queue):
     global consequtive
     send_queue = Queue()
+    local_consequtive = 0
+    local_data_sum = 0.0
 
     while True:
         data = queue.get()
         # print(data)
         if data is _sentinel:
+            # delete device via rest
+            req = requests.delete(signal_url)
+            if(req.status_code == 204):
+                print("Device removed from device's database")
+
             # sending end signal to java and wait to close all connections
             socket.send(b'q\n')
             time.sleep(5)
@@ -161,38 +162,36 @@ def consumer(queue):
 
         if(data > 0.59 ):
             consequtive += 1
-            # if detected > 50 send to api rest
-            # add representative values to send if they represent a vehicle
+            local_consequtive += 1
+            local_data_sum += data
+            if(local_consequtive == 50):
+                # if detected > 50 send to api rest
+                existing_device_payload = {'level': str(local_data_sum)}
+                req = requests.patch(signal_url, existing_device_payload)
+
+                print("50 consequtive blocks, sending to rest API " + str(local_data_sum))
+                local_consequtive = 0
+                local_data_sum = 0.0
+
+            # add representative values to send_queue
             send_queue.put(data)
         else:
-            detected = False
-            if(consequtive > 110):
-                # Multiples vehicles
-                detected = True
-                print("puede que mas de un coche!")
-            elif(consequtive > 50):
-                # Vehicle
-                detected = True
-                print("coche!")
-            elif(consequtive > 38):
-                # Fast vehicle or maybe noise
-                detected = True
-                print("puede que coche!")
-
-            if(detected):
-                #print("detectao")
+            if(consequtive > 50):
+                print("sending to cassandra")
                 while not send_queue.empty():
-                    #print("enviando")
-                    # detected case, sending items to KAA SDK
+                    # detected case, sending items to KAA SDK via TCP socket
                     item_to_send = send_queue.get()
                     linestr =str(item_to_send)+"\n"
                     linebytes = bytes(linestr, 'utf-8')
                     socket.send(linebytes)
 
-            # clear send_queue
+            # consequtive was not bigger than 50, cleaning resources
             send_queue = Queue()
             send_queue.queue.clear()
             consequtive = 0
+            local_consequtive = 0
+            local_data_sum = 0.0
+
 
 global line_num
 global consequtive
