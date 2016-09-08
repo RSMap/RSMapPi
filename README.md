@@ -13,7 +13,7 @@ Python detection module send data over TCP socket opened by DataSender class whi
 
 ## Vehicle sound detector
 
-This module collect sound noise and try to identify vehicles.
+This module collect sound noise and try to identify vehicles. To start, run DataSender before VehicleAnalyzer because DataSender initializes TCP socket to receive connections. When it's ready to receive you should see *"Waint for VehicleAnalyzer on TCP socket at port 5000"*, after that you can run VehicleAnalyzer.py.
 
 ### Instructions for run
 

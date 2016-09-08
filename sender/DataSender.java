@@ -32,15 +32,14 @@ public class DataSender {
             }
         });
 
-        // Set a custom strategy for uploading logs.
-        // The default strategy uploads logs after either a threshold logs count
-        // or a threshold logs size has been reached.
-        // The following custom strategy uploads every log record as soon as it
-        // is created.
+
+        // Store strategy defines how many entries are needed to send
+        // due to real time requirements is set to 1.
         kaaClient.setLogUploadStrategy(new RecordCountLogUploadStrategy(1));
         kaaClient.start();
         System.out.println("Waiting for KAA client");
 
+        // Wait 30 sec before starting read data
         try{
             TimeUnit.SECONDS.sleep(30L);
         } catch (InterruptedException e) {
@@ -49,17 +48,20 @@ public class DataSender {
 
         String fromclient;
 
+        // Socket Initializing, it will receive data from VehicleAnalyzer.py
         try{
         System.out.println("Initializing local socket...");
         ServerSocket Server = new ServerSocket (5000);
 
-        System.out.println ("TCPServer Waiting for client on port 5000");
+        System.out.println ("Waint for VehicleAnalyzer on TCP socket at port 5000");
 
         Socket connected = Server.accept();
-        System.out.println( " THE CLIENT"+" "+ connected.getInetAddress() +":"+connected.getPort()+" IS CONNECTED ");
+        System.out.println( " VehicleAnalyzer with "+ connected.getInetAddress() +":"+connected.getPort()+" is connected! ");
 
+        // Init reading buffer over TCP socket
         BufferedReader inFromClient = new BufferedReader(new InputStreamReader (connected.getInputStream()));
 
+        // First to packets comes with device location and device id
         String location = inFromClient.readLine();
         String device = inFromClient.readLine();
 
@@ -67,20 +69,26 @@ public class DataSender {
         System.out.println("Device id: " + device);
 
         while ( true ){
+            // read lines from socket
             fromclient = inFromClient.readLine();
 
+            // stop signal
             if ( fromclient.equals("q") || fromclient.equals("Q") ){
                 connected.close();
                 break;
             }else {
+              // create new AudioReport object wich is appended to Cassandra
               AudioReport report = new AudioReport();
               long timestamp = System.currentTimeMillis();
               report.setZoneId(location);
               report.setDeviceId(device);
               report.setLevel(Double.parseDouble(fromclient));
               report.setTimestamp(timestamp);
+
+              // send Audio Report object
               kaaClient.addLogRecord(report);
 
+              // wait 1 MILLISECONDS to avoid overwrite data with the same ts
               try{
                   TimeUnit.MILLISECONDS.sleep(1L);
               } catch (InterruptedException e) {
@@ -90,60 +98,21 @@ public class DataSender {
             }
         }
       }catch (IOException e){
-        System.out.println("err");
+        System.out.println("Socket error");
       }
 
-      System.out.println("Saliendo!");
+      System.out.println("VehicleAnalyzer is now stopped, exiting.");
 
-        // try {
-    		// 	BufferedReader bufferRead = new BufferedReader(new InputStreamReader(System.in));
-    		// 	//PrintWriter writer = new PrintWriter("result.txt", "UTF-8");
-    		// 	boolean cont = true;
-    		// 	while(cont) {
-    		// 		//writer.println(s);
-    		// 		String s = bufferRead.readLine();
-    		// 		if(!s.equals("x")){
-    		// 			//writer.close();
-        //       AudioReport report = new AudioReport();
-        //       long timestamp = System.currentTimeMillis();
-        //       report.setZoneId("Granada");
-        //       report.setDeviceId("Device 1");
-        //       report.setLevel(Double.parseDouble(s));
-        //       report.setTimestamp(timestamp);
-        //       // logs.add(report);
-        //
-        //       kaaClient.addLogRecord(report);
-    		// 		}else{
-        //       cont = false;
-        //     }
-    		// 	}
-        //   System.out.println("saliendo!");
-        //
-        //
-    		// } catch(IOException e) {
-    		// 	e.printStackTrace();
-    		// }
-        //
-        // System.out.println("sigo saliendo!");
-        // // create audio report
-        // // AudioReport report = new AudioReport();
-        // // long timestamp = System.currentTimeMillis();
-        // // report.setZoneId("Granada");
-        // // report.setDeviceId("Device 1");
-        // // report.setLevel(0.93);
-        // // report.setTimestamp(timestamp);
-        // // // logs.add(report);
-        // //
-        // // kaaClient.addLogRecord(report);
-        //
-        //
-        // // Stop the Kaa client and release all the resources which were in use.
-        try{
-            TimeUnit.SECONDS.sleep(60L);
-        } catch (InterruptedException e) {
-            System.out.println("e.GetMessage()");
-        }
-        kaaClient.stop();
-        //LOG.info("Zeppelin data analytics demo stopped");
+      // release all resources in use
+      kaaClient.stop();
+
+      // wait for resource re
+      try{
+          TimeUnit.SECONDS.sleep(60L);
+      } catch (InterruptedException e) {
+          System.out.println("e.GetMessage()");
+      }
+
+
     }
 }
