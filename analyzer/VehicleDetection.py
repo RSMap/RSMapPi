@@ -8,27 +8,34 @@ import requests
 import sys
 from queue import Queue, Empty
 from threading import Thread
-
-# Test
 import time
 import socket
-######
+
 
 # check if this client send data before
-device_id = 'TFGDevice' # case sensitive
+# device id (case sensitive)
+device_id = 'TFGDevice'
+# device location (name)
 device_location = 'Avda Dilar'
+# device coordinates
 latitude = '37.177336'
 longitude = '-3.598557'
+# signal_type (default unknown)
 signal_type = 'u'
 # level -1 means device is connected and it will send data soon.
 level = '-1.0'
+# new_device_payload contains all related info with a map structure
 new_device_payload = {'device_id':device_id, 'lat':latitude, 'long':longitude, 'level':level, 'type':signal_type}
+# if device exists, only level is needed
 existing_device_payload = {'level': level}
+# rest urls
 signals_list_url = 'http://52.210.3.41/api/signals/'
 signal_url = 'http://52.210.3.41/api/signal/'+device_id+'/'
 
+# rest first request
 req = requests.post(signals_list_url, new_device_payload)
 
+# check rest response
 if(req.status_code == 400):
     print("Device already exists, sending connect signal")
     req = requests.patch(signal_url, existing_device_payload)
@@ -42,7 +49,6 @@ elif(req.status_code == 201):
 else:
     print("Device can't connect to rest service, check your connection.")
     sys.exit()
-
 
 
 # Connecting to DataSender socket on localhost
@@ -61,86 +67,85 @@ socket.send(device_id_bytes)
 time.sleep(20)
 
 # Variable definition
-_sentinel = object() # sentinel indicates end queue processing
-np.set_printoptions(threshold=np.inf) # full numpy array output (test purpose)
+# sentinel indicates end queue processing
+_sentinel = object()
+# full numpy array output (testing purposes)
+np.set_printoptions(threshold=np.inf)
 
-gain = 10 # multiplier factor
-columns = 100 # numero de niveles de cuantización
-device = 2 # id del dispositivo
-block_duration = 100 # duración de cada bloque capturado (ms)
-samplerate = 44100 # frecuencia de muestreo
-high = 2000 # frecuencia de muestreo alta
-low = 450 # frecuencia de muestreo baja
-delta_f = (high - low) / columns # valor de cuantización
-fftsize = np.ceil(samplerate / delta_f).astype(int) # definimos el número de bins usados para dividir la ventana en bandas, determina la resolucion en el dominio de la frecuencia
-low_bin = np.floor(low / delta_f) # resolución de frecuencia de la ventana
-cumulated_status = sd.CallbackFlags() # enable logging output
+ # multiplier factor
+gain = 10
+ # number of cuantization levels
+levels = 100
+# system device id
+device = 2
+# block time (ms)
+block_duration = 100
+# sample rate
+samplerate = 44100
+# high sample rate
+high = 2000
+# low sample rate
+low = 450
+# cuantization value
+delta_f = (high - low) / levels
+# window will divided in bands, fftsize defines the resolution on freq domain
+fftsize = np.ceil(samplerate / delta_f).astype(int)
+# window freq resolution
+low_bin = np.floor(low / delta_f)
+# vehicle threshold
+threshold = 0.59
+# consequtive blocks, its may depend of the road conditions
+consequtive_blocks = 50
 
+ # enable logging output
+cumulated_status = sd.CallbackFlags()
 
-colors = 30, 34, 35, 91, 93, 97
-chars = ' :%#\t#%:'
-gradient = []
-for bg, fg in zip(colors, colors[1:]):
-    for char in chars:
-        if char == '\t':
-            bg, fg = fg, bg
-        else:
-            gradient.append('\x1b[{};{}m{}'.format(fg, bg + 10, char))
-
-
+# callback will called from producer for each block
 def callback(indata, frames, time, status):
     global cumulated_status
-    global line_num
-    global fl
     global consequtive
 
+    # logging purpose
     cumulated_status |= status
 
     # indata size = samplerate * block_duration / 1000
     if any(indata):
-        #indata[:, 0] toma los valores de la primera dimension del array (solo tiene una dimension)
-        # np.fft.rfft This function computes the one-dimensional n-point discrete Fourier Transform (DFT) of a real-valued array by means of an efficient algorithm called the Fast Fourier Transform (FFT).
+        # computes the one-dimensional n-point discrete Fourier Transform (DFT)
+        # of a real-valued array by the Fast Fourier Transform (FFT).
         magnitude = np.abs(np.fft.rfft(indata[:, 0], n=fftsize))
+        # signal values amplification
         magnitude *= gain / fftsize
 
         # put row sum on queue to analyze it
-        queue.put(np.sum(magnitude[low_bin:low_bin + columns]))
-
-        line = ""
-
-        for x in magnitude[low_bin:low_bin + columns]:
-            line += (gradient[int(np.clip(x, 0, 1) * (len(gradient) - 1))])
-
-        print(
-            *line, sep='',
-            end='\x1b[0m+ ' + str(np.sum(magnitude[low_bin:low_bin + columns])) + ' ' + str(line_num) + ' ' + str(consequtive)  + '\n',
-            flush=True
-            )
-
-        line_num += 1
+        queue.put(np.sum(magnitude[low_bin:low_bin + levels]))
 
     else:
         print('no input', flush=True)
 
-def producer(queue, line_num):
+# producer interacts with our sound card and calls callback function
+def producer(queue):
     cont = True
+    # sounddevice method, open an input stream to selected device
     with sd.InputStream(device=device, channels=1, callback=callback,
                         blocksize=int(samplerate * block_duration / 1000),
                         samplerate=samplerate):
         while cont:
+            # checks if exists stop signal
             response = input()
             if response in ('', 'q', 'Q'):
                 queue.put(_sentinel)
                 cont = False
                 break
-
+    # show logging
     if cumulated_status:
         logging.warning(str(cumulated_status))
 
-
+# reads data from queue and discard undesired values
 def consumer(queue):
     global consequtive
+    # this queue stores valid data which it will sended to rest and cassandra
     send_queue = Queue()
+    # local variables allows send signals for a defined number of blocks
     local_consequtive = 0
     local_data_sum = 0.0
 
@@ -152,32 +157,31 @@ def consumer(queue):
             req = requests.delete(signal_url)
             if(req.status_code == 204):
                 print("Device removed from device's database")
-
             # sending end signal to java and wait to close all connections
             socket.send(b'q\n')
             time.sleep(5)
-
             # exit
             break
 
-        if(data > 0.59 ):
+        if(data > threshold ):
+            # global block consequtive count
             consequtive += 1
             local_consequtive += 1
             local_data_sum += data
-            if(local_consequtive == 50):
-                # if detected > 50 send to api rest
+            if(local_consequtive == consequtive_blocks):
+                # if detected > consequtive_blocks send to api rest
                 existing_device_payload = {'level': str(local_data_sum)}
                 req = requests.patch(signal_url, existing_device_payload)
 
-                print("50 consequtive blocks, sending to rest API " + str(local_data_sum))
+                print(str(consequtive_blocks) + " consequtive blocks, sending to rest API " + str(local_data_sum))
                 local_consequtive = 0
                 local_data_sum = 0.0
 
             # add representative values to send_queue
             send_queue.put(data)
         else:
-            if(consequtive > 50):
-                print("sending to cassandra")
+            if(consequtive > consequtive_blocks):
+                print("Sending data to cassandra")
                 while not send_queue.empty():
                     # detected case, sending items to KAA SDK via TCP socket
                     item_to_send = send_queue.get()
@@ -185,7 +189,7 @@ def consumer(queue):
                     linebytes = bytes(linestr, 'utf-8')
                     socket.send(linebytes)
 
-            # consequtive was not bigger than 50, cleaning resources
+            # consequtive was not bigger than consequtive_blocks, cleaning resources
             send_queue = Queue()
             send_queue.queue.clear()
             consequtive = 0
@@ -193,23 +197,16 @@ def consumer(queue):
             local_data_sum = 0.0
 
 
-global line_num
-global consequtive
 
+global consequtive
 consequtive = 0
-line_num = 0
 
 queue = Queue()
 
-thread_prod = Thread(target=producer, args=(queue, line_num, ))
+# thread instances
+thread_prod = Thread(target=producer, args=(queue, ))
 thread_cons = Thread(target=consumer, args=(queue, ))
 
+# thread init
 thread_prod.start()
 thread_cons.start()
-
-
-# time.sleep(20)
-# # removing from database
-# req = requests.delete(signal_url)
-# if(req.status_code == 204):
-#     print("Device removed from device's database")

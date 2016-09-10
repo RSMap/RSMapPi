@@ -55,13 +55,14 @@ public class DataSender {
 
         System.out.println ("Waint for VehicleAnalyzer on TCP socket at port 5000");
 
+        // Listening connections
         Socket connected = Server.accept();
         System.out.println( " VehicleAnalyzer with "+ connected.getInetAddress() +":"+connected.getPort()+" is connected! ");
 
         // Init reading buffer over TCP socket
         BufferedReader inFromClient = new BufferedReader(new InputStreamReader (connected.getInputStream()));
 
-        // First to packets comes with device location and device id
+        // First two packets comes with device location and device id
         String location = inFromClient.readLine();
         String device = inFromClient.readLine();
 
@@ -106,13 +107,11 @@ public class DataSender {
       // release all resources in use
       kaaClient.stop();
 
-      // wait for resource re
+      // wait for resource release
       try{
           TimeUnit.SECONDS.sleep(60L);
       } catch (InterruptedException e) {
           System.out.println("e.GetMessage()");
       }
-
-
     }
 }
