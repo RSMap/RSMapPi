@@ -3,7 +3,6 @@ import logging
 import numpy as np
 import shutil
 import sounddevice as sd
-import subprocess
 import requests
 import sys
 from queue import Queue, Empty
